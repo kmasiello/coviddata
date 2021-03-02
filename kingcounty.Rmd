@@ -1,0 +1,58 @@
+---
+title: "Untitled"
+author: "Katie Masiello"
+date: "3/1/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(plotly)
+library(RcppRoll)
+```
+
+```{r}
+# Read in data from NYT
+
+counties_live <- readr::read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv')
+
+counties <- readr::read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv')
+```
+
+King county fips code is 53033. 
+```{r}
+pop_adjusted <- 22.26269204 #population / 100k 
+(king <- counties %>% filter(fips == 53033)) %>% select(-fips)
+(king_live <- counties_live %>% filter(fips == 53033)) %>% select(-fips)
+
+# cases is cumulative. add in new daily cases
+king <- king %>% 
+  mutate(new_cases = cases - lag(cases, default = cases[1])) %>% 
+  mutate(roll_mean07 = roll_mean(new_cases, n=7,align = "right", fill = NA)) %>% 
+  mutate(roll_mean14 = roll_mean(new_cases, n=14,align = "right", fill = NA)) %>% 
+  mutate(indicator07 = roll_sum(new_cases/pop_adjusted, n=7, align = "right", fill = NA)) %>% 
+  mutate(indicator14 = roll_sum(new_cases/pop_adjusted, n=14, align = "right", fill = NA))
+  
+```
+
+```{r}
+#plots
+king_subset <- king %>% filter(date >= "2020-12-01")
+p <- ggplot(king_subset) +
+ aes(x = date, weight = new_cases, text = paste('count:', new_cases,
+                                                '<br>date:', as.Date(date),
+                                                '<br>7daynew:', round(roll_mean07),
+                                                '<br>14daynew:', round(roll_mean14),
+                                                '<br>7day_per100k:', round(indicator07),
+                                                '<br>14day_per100k:', round(indicator14))) +
+ geom_bar(fill = "#bdbdbd") +
+ labs(y = "Cases", title = "King County") + 
+  geom_line(aes(x = date, y = roll_mean14, group = 1), color = "#cb181d") + 
+  geom_line(aes(x = date, y = indicator14, group = 1), color = "#7570B3") +
+ theme_minimal()
+p %>% ggplotly(tooltip = c("text"))
+```
+
